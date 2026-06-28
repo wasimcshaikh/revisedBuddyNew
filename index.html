@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>revisedBuddy - Scholarly Notebook LLM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        arxiv: {
+                            brand: '#b31b1b', // Classic arXiv Cornell Red
+                            dark: '#222222',
+                            light: '#f4f4f1',  // Academic paper background tint
+                            slate: '#71717a',
+                            border: '#e4e4e7'
+                        }
+                    },
+                    fontFamily: {
+                        serif: ['Georgia', 'Cambria', 'Times New Roman', 'Times', 'serif'],
+                        sans: ['Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f4f4f1; }
+        ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
+    </style>
+</head>
+<body class="bg-arxiv-light text-arxiv-dark font-sans h-screen flex flex-col overflow-hidden select-none">
+
+    <header class="bg-white border-b border-arxiv-border h-14 flex items-center justify-between px-6 z-10 shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="bg-arxiv-brand text-white font-serif font-bold px-2 py-0.5 text-sm tracking-wide rounded-sm">arXiv style</div>
+            <h1 class="text-lg font-serif font-bold tracking-tight">revisedBuddy <span class="font-sans text-xs font-normal text-arxiv-slate ml-1">v1.3 (MindMap & Presentation)</span></h1>
+        </div>
+        
+        <div class="flex items-center space-x-3 w-96 justify-end">
+            <div class="relative w-64">
+                <input type="password" id="apiKeyInput" 
+                       placeholder="Enter Gemini API Key..." 
+                       class="w-full text-xs bg-arxiv-light border border-arxiv-border rounded px-3 py-1.5 focus:outline-none focus:border-arxiv-brand transition-colors font-mono pr-8">
+                <i data-lucide="key" class="w-3.5 h-3.5 absolute right-2.5 top-2 text-arxiv-slate"></i>
+            </div>
+            <button id="connectBtn" onclick="validateAndConnectKey()" class="bg-arxiv-dark hover:bg-black text-white text-xs px-3 py-1.5 rounded font-medium transition-colors">
+                Connect
+            </button>
+            <div class="flex items-center space-x-1.5 pl-1">
+                <div id="statusDot" class="w-3 h-3 rounded-full bg-red-500 animate-pulse transition-all duration-300"></div>
+                <span id="statusText" class="text-xxs font-mono uppercase tracking-wider text-arxiv-slate text-[10px]">Disconnected</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden w-full">
+        
+        <aside class="w-72 bg-white border-r border-arxiv-border flex flex-col h-full shrink-0">
+            <div class="p-4 border-b border-arxiv-border">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-arxiv-slate flex items-center">
+                        <i data-lucide="library" class="w-3.5 h-3.5 mr-1.5"></i> Notebook Library
+                    </h2>
+                </div>
+                
+                <label class="border-2 border-dashed border-arxiv-border hover:border-arxiv-brand bg-arxiv-light/50 hover:bg-arxiv-light rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer transition-all group">
+                    <input type="file" id="fileUpload" accept=".pdf" multiple class="hidden" onchange="handleFileUpload(event)">
+                    <i data-lucide="upload-cloud" class="w-8 h-8 text-arxiv-slate group-hover:text-arxiv-brand transition-colors mb-2"></i>
+                    <span class="text-xs font-medium text-arxiv-dark">Upload Subject Notes</span>
+                    <span class="text-[10px] text-arxiv-slate mt-0.5">PDF format only</span>
+                </label>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-3 space-y-1.5" id="docList">
+                <div id="noDocsState" class="text-center py-8 text-arxiv-slate px-4">
+                    <i data-lucide="file-text" class="w-8 h-8 mx-auto mb-2 opacity-40"></i>
+                    <p class="text-xs">No documents uploaded yet.</p>
+                </div>
+            </div>
+
+            <div class="p-3 border-t border-arxiv-border bg-arxiv-light/60 space-y-2">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-arxiv-slate block">Study Tools</span>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="generateMindMap()" class="bg-white border border-arxiv-border hover:border-arxiv-brand text-arxiv-dark text-xs py-2 px-2 rounded font-medium shadow-sm flex items-center justify-center transition-colors">
+                        <i data-lucide="network" class="w-3.5 h-3.5 mr-1 text-arxiv-brand"></i> Mind Map
+                    </button>
+                    <button onclick="generatePresentation()" class="bg-white border border-arxiv-border hover:border-arxiv-brand text-arxiv-dark text-xs py-2 px-2 rounded font-medium shadow-sm flex items-center justify-center transition-colors">
+                        <i data-lucide="presentation" class="w-3.5 h-3.5 mr-1 text-arxiv-brand"></i> Presentation
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-3 bg-arxiv-light border-t border-arxiv-border text-[11px] text-arxiv-slate">
+                <div class="flex justify-between items-center">
+                    <span>Active Managed Papers:</span>
+                    <span id="totalDocsCount" class="font-mono font-bold text-arxiv-dark">0</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1 bg-arxiv-light flex flex-col h-full relative overflow-hidden">
+            <div class="h-11 bg-white border-b border-arxiv-border px-4 flex items-center justify-between shrink-0">
+                <div class="flex items-center space-x-2 truncate">
+                    <i data-lucide="eye" class="w-4 h-4 text-arxiv-slate"></i>
+                    <span id="currentViewerTitle" class="text-xs font-medium text-arxiv-dark truncate max-w-md">No document selected</span>
+                </div>
+                <div class="text-[11px] text-arxiv-slate font-mono bg-arxiv-light px-2 py-0.5 rounded border border-arxiv-border">
+                    Native Render Desk
+                </div>
+            </div>
+
+            <div class="flex-1 w-full h-full relative" id="canvasContainer">
+                <div id="pdfPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-arxiv-slate">
+                    <h3 class="font-serif font-bold text-lg text-arxiv-dark mb-1">Academic Reading Desk</h3>
+                    <p class="text-xs max-w-sm">Select an uploaded PDF from the sidebar library to view its charts and notes content layout.</p>
+                </div>
+                <iframe id="pdfFrameViewer" class="w-full h-full border-none hidden"></iframe>
+            </div>
+        </main>
+
+        <aside class="w-[440px] bg-white border-l border-arxiv-border flex flex-col h-full shrink-0">
+            <div class="flex bg-arxiv-light border-b border-arxiv-border">
+                <button id="tab-chat" onclick="switchRightTab('chat')" class="flex-1 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 border-arxiv-brand text-arxiv-dark transition-all bg-white">Chat</button>
+                <button id="tab-mindmap" onclick="switchRightTab('mindmap')" class="flex-1 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 border-transparent text-arxiv-slate hover:text-arxiv-dark transition-all">MindMap</button>
+                <button id="tab-slides" onclick="switchRightTab('slides')" class="flex-1 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 border-transparent text-arxiv-slate hover:text-arxiv-dark transition-all">Slides</button>
+            </div>
+
+            <div id="container-chat" class="flex-1 flex flex-col overflow-hidden">
+                <div id="chatMessages" class="flex-1 overflow-y-auto p-4 space-y-4 bg-arxiv-light/30">
+                    <div class="bg-white border border-arxiv-border rounded p-3.5 text-xs space-y-2 max-w-[90%] shadow-sm">
+                        <p class="font-serif font-bold text-arxiv-brand">Welcome to revisedBuddy Smart Routing Engine</p>
+                        <p class="text-arxiv-dark leading-relaxed">Ask generic queries or upload notes files for deep page-referenced responses.</p>
+                        <button onclick="injectStarter('Who was the first prime minister of India?')" class="text-left text-[11px] text-arxiv-brand hover:underline block truncate">🇮🇳 Ask: Who was the first prime minister of India?</button>
+                    </div>
+                </div>
+
+                <div class="p-3 border-t border-arxiv-border bg-white">
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="chatInput" 
+                               placeholder="Ask something or type a general query..." 
+                               class="flex-1 text-xs bg-arxiv-light border border-arxiv-border rounded-lg px-3 py-2 focus:outline-none focus:border-arxiv-brand"
+                               onkeydown="if(event.key === 'Enter') sendChatMessage()">
+                        <button onclick="sendChatMessage()" id="sendBtn" class="bg-arxiv-brand hover:bg-red-800 text-white rounded-lg p-2 transition-colors shrink-0">
+                            <i data-lucide="send" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="container-mindmap" class="flex-1 overflow-y-auto p-4 hidden bg-arxiv-light/20">
+                <div id="mindmapWorkspace" class="bg-white border border-arxiv-border rounded-lg p-5 min-h-full space-y-4 shadow-inner">
+                    <div class="text-center py-12 text-arxiv-slate">
+                        <i data-lucide="network" class="w-10 h-10 mx-auto mb-2 text-arxiv-slate/40"></i>
+                        <p class="text-xs">No Mind Map generated. Click the **Mind Map** button on the bottom left sidebar to auto-generate from files.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="container-slides" class="flex-1 overflow-y-auto p-4 hidden bg-arxiv-light/20">
+                <div id="slidesWorkspace" class="bg-white border border-arxiv-border rounded-lg p-5 min-h-full space-y-4 flex flex-col justify-between shadow-inner">
+                    <div class="text-center py-12 text-arxiv-slate my-auto">
+                        <i data-lucide="presentation" class="w-10 h-10 mx-auto mb-2 text-arxiv-slate/40"></i>
+                        <p class="text-xs">No Presentation active. Click **Presentation** on the left menu rail to compile slides layout structure.</p>
+                    </div>
+                </div>
+            </div>
+
+        </aside>
+
+    </div>
+
+    <script>
+        let appState = {
+            apiKey: '',
+            isKeyConnected: false,
+            documents: [] // Array: { id, name, pages: [{ pageNum, text }], blobUrl }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            loadApiKeyFromStorage();
+        });
+
+        function loadApiKeyFromStorage() {
+            const savedKey = localStorage.getItem('revised_buddy_gemini_key');
+            if (savedKey) {
+                document.getElementById('apiKeyInput').value = savedKey;
+                appState.apiKey = savedKey;
+                validateAndConnectKey();
+            }
+        }
+
+        async function validateAndConnectKey() {
+            const inputVal = document.getElementById('apiKeyInput').value.trim();
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            const connectBtn = document.getElementById('connectBtn');
+
+            if (!inputVal) return;
+            connectBtn.innerText = "Checking...";
+            
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash?key=${inputVal}`);
+                if (!response.ok) throw new Error("Invalid API Key");
+
+                appState.apiKey = inputVal;
+                appState.isKeyConnected = true;
+                localStorage.setItem('revised_buddy_gemini_key', inputVal);
+
+                statusDot.className = "w-3 h-3 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]";
+                statusText.innerText = "Connected";
+                statusText.className = "text-xxs font-mono uppercase tracking-wider text-green-600 font-bold text-[10px]";
+                connectBtn.innerText = "Connected";
+                connectBtn.className = "bg-green-700 hover:bg-green-800 text-white text-xs px-3 py-1.5 rounded font-medium transition-colors";
+            } catch (err) {
+                statusDot.className = "w-3 h-3 rounded-full bg-red-500 animate-pulse";
+                statusText.innerText = "Disconnected";
+                connectBtn.innerText = "Connect";
+                appState.isKeyConnected = false;
+            }
+        }
+
+        async function handleFileUpload(event) {
+            const files = event.target.files;
+            if (!files.length) return;
+
+            document.getElementById('noDocsState').classList.add('hidden');
+
+            for (let file of files) {
+                if (file.type !== "application/pdf") continue;
+
+                const docId = 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+                appendDocRowElement(docId, file.name);
+
+                try {
+                    const localBlobUrl = URL.createObjectURL(file);
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                    
+                    let indexedPages = [];
+
+                    for (let pNum = 1; pNum <= pdfDoc.numPages; pNum++) {
+                        const page = await pdfDoc.getPage(pNum);
+                        const txtContent = await page.getTextContent();
+                        const textString = txtContent.items.map(item => item.str).join(" ");
+                        indexedPages.push({
+                            pageNumber: pNum,
+                            text: textString
+                        });
+                    }
+
+                    const newDocument = {
+                        id: docId,
+                        name: file.name,
+                        pages: indexedPages,
+                        blobUrl: localBlobUrl,
+                        isActiveContext: true
+                    };
+
+                    appState.documents.push(newDocument);
+                    updateLibraryMetadataSummary();
+
+                    const badge = document.getElementById(`status-${docId}`);
+                    if(badge) {
+                        badge.innerText = `Indexed (${indexedPages.length} pgs)`;
+                        badge.className = "text-[9px] bg-green-100 text-green-800 px-1 rounded font-mono font-medium";
+                    }
+
+                    selectDocumentForViewer(docId);
+
+                } catch (error) {
+                    console.error("Text layer processing failure:", error);
+                }
+            }
+            event.target.value = "";
+        }
+
+        function appendDocRowElement(id, filename) {
+            const container = document.getElementById('docList');
+            const rowHtml = `
+                <div id="${id}" class="group bg-white border border-arxiv-border rounded p-2.5 hover:shadow-sm transition-all duration-150 flex flex-col space-y-2 cursor-pointer">
+                    <div class="flex items-start justify-between space-x-2">
+                        <div class="flex items-start space-x-2 min-w-0" onclick="selectDocumentForViewer('${id}')">
+                            <input type="checkbox" id="check-${id}" checked onclick="event.stopPropagation(); toggleDocContext('${id}')" class="mt-0.5 accent-arxiv-brand cursor-pointer">
+                            <span class="text-xs font-medium text-arxiv-dark font-serif break-words line-clamp-2 leading-snug">${filename}</span>
+                        </div>
+                        <button onclick="event.stopPropagation(); deleteDocument('${id}')" class="text-arxiv-slate hover:text-arxiv-brand opacity-0 group-hover:opacity-100 transition-opacity p-0.5">
+                            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                    <div class="flex justify-between items-center" onclick="selectDocumentForViewer('${id}')">
+                        <span id="status-${id}" class="text-[9px] bg-amber-100 text-amber-800 px-1 rounded font-mono">Parsing...</span>
+                        <span class="text-[10px] text-arxiv-slate font-serif italic">View</span>
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', rowHtml);
+            lucide.createIcons();
+        }
+
+        function toggleDocContext(id) {
+            const doc = appState.documents.find(d => d.id === id);
+            if (doc) doc.isActiveContext = document.getElementById(`check-${id}`).checked;
+        }
+
+        function updateLibraryMetadataSummary() {
+            document.getElementById('totalDocsCount').innerText = appState.documents.length;
+            if (appState.documents.length === 0) {
+                document.getElementById('noDocsState').classList.remove('hidden');
+            }
+        }
+
+        function deleteDocument(id) {
+            const doc = appState.documents.find(d => d.id === id);
+            if (doc && doc.blobUrl) URL.revokeObjectURL(doc.blobUrl);
+            appState.documents = appState.documents.filter(d => d.id !== id);
+            document.getElementById(id).remove();
+            
+            const frame = document.getElementById('pdfFrameViewer');
+            if (appState.activeDocId === id) {
+                appState.activeDocId = null;
+                frame.classList.add('hidden');
+                frame.src = "";
+                document.getElementById('pdfPlaceholder').classList.remove('hidden');
+                document.getElementById('currentViewerTitle').innerText = "No document selected";
+            }
+            updateLibraryMetadataSummary();
+        }
+
+        function selectDocumentForViewer(id) {
+            const doc = appState.documents.find(d => d.id === id);
+            if (!doc) return;
+
+            appState.documents.forEach(d => {
+                const el = document.getElementById(d.id);
+                if(el) el.className = el.className.replace(" border-arxiv-brand bg-arxiv-light/30", " border-arxiv-border bg-white");
+            });
+            
+            const selectedElement = document.getElementById(id);
+            if(selectedElement) selectedElement.className += " border-arxiv-brand bg-arxiv-light/30";
+
+            appState.activeDocId = id;
+            document.getElementById('currentViewerTitle').innerText = doc.name;
+            document.getElementById('pdfPlaceholder').classList.add('hidden');
+            
+            const frame = document.getElementById('pdfFrameViewer');
+            frame.classList.remove('hidden');
+            frame.src = doc.blobUrl;
+        }
+
+        function switchRightTab(tabName) {
+            ['chat', 'mindmap', 'slides'].forEach(t => {
+                document.getElementById(`container-${t}`).classList.add('hidden');
+                document.getElementById(`tab-${t}`).className = "flex-1 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 border-transparent text-arxiv-slate hover:text-arxiv-dark transition-all";
+            });
+            document.getElementById(`container-${tabName}`).classList.remove('hidden');
+            document.getElementById(`tab-${tabName}`).className = "flex-1 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 border-arxiv-brand text-arxiv-dark transition-all bg-white";
+        }
+
+        function injectStarter(promptText) {
+            switchRightTab('chat');
+            document.getElementById('chatInput').value = promptText;
+            sendChatMessage();
+        }
+
+        // Live Hybrid Q&A Router Pipeline Configuration
+        async function sendChatMessage() {
+            const chatInput = document.getElementById('chatInput');
+            const query = chatInput.value.trim();
+            if (!query) return;
+
+            if (!appState.isKeyConnected) {
+                alert("Connect your Gemini API Key first.");
+                return;
+            }
+
+            appendMessageBubble(query, 'user');
+            chatInput.value = "";
+
+            const activeDocs = appState.documents.filter(d => d.isActiveContext);
+            
+            // Build the dynamic instruction framework prompt layout payload
+            let finalSystemInstruction = "";
+            
+            if (activeDocs.length === 0) {
+                // Generalized Routing mode activation automatically
+                finalSystemInstruction = `You are revisedBuddy, a helpful academic engine. The user has no document attached right now. Answer this general reference query directly, clearly, and concisely: "${query}"`;
+            } else {
+                // Notes context analysis routing mode + exact page indexing requirements
+                finalSystemInstruction = `You are revisedBuddy, evaluating technical notes documents.
+Your goal is to answer the query accurately. 
+
+CRITICAL ROUTING INSTRUCTION:
+1. Determine if the question is a generic global knowledge question (e.g., "Who was the first PM of India", "What is the speed of light"). If yes, answer it perfectly using your base intelligence and add a line saying '[Source: General Knowledge Model Routing]'.
+2. If the query is related to the attached document contents, answer using the notes text context. You MUST explicitly provide references stating exactly which Document Name and Page Number the answer was taken from.
+
+=== ATTACHED LIBRARY DOCUMENTS NOTES CONTEXT ===\n`;
+
+                activeDocs.forEach(doc => {
+                    doc.pages.forEach(pg => {
+                        finalSystemInstruction += `\n[DOCUMENT: ${doc.name} | PAGE: ${pg.pageNumber}]\nContent: ${pg.text}\n`;
+                    });
+                });
+                finalSystemInstruction += `\n=== END OF CONTEXT REFERENCE ===\nUser Query: ${query}`;
+            }
+
+            const streamId = 'stream_' + Date.now();
+            appendMessageBubble("Processing routing rules...", 'bot', streamId);
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${appState.apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: finalSystemInstruction }] }] })
+                });
+
+                const data = await response.json();
+                const text = data.candidates[0].content.parts[0].text;
+                document.getElementById(streamId).innerHTML = formatMarkdownResponse(text);
+            } catch (err) {
+                document.getElementById(streamId).innerHTML = `<span class="text-red-600">Error processing request.</span>`;
+            }
+        }
+
+        // Automated Core Mindmap Generation Script Pipeline Interface
+        async function generateMindMap() {
+            if (!appState.isKeyConnected) return alert("Connect your Gemini API Key first.");
+            const activeDocs = appState.documents.filter(d => d.isActiveContext);
+            if (!activeDocs.length) return alert("Please upload and checkmark at least one PDF note file to extract a mindmap.");
+
+            switchRightTab('mindmap');
+            const workspace = document.getElementById('mindmapWorkspace');
+            workspace.innerHTML = `<div class="text-center py-12 text-arxiv-slate animate-pulse"><i data-lucide="loader" class="w-6 h-6 animate-spin mx-auto mb-2"></i>Synthesizing visual mind map tree layers via Gemini...</div>`;
+            lucide.createIcons();
+
+            let contextStr = "";
+            activeDocs.forEach(d => d.pages.forEach(p => contextStr += p.text + " "));
+
+            const instruction = `Generate a structural academic mind map based on this text material. Format the response ONLY as a clean, nested bulleted hierarchy layout using Markdown style. Do not write introductory prose. Text: ${contextStr}`;
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${appState.apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: instruction }] }] })
+                });
+                const data = await response.json();
+                const resText = data.candidates[0].content.parts[0].text;
+                
+                // Wrap structured elements inside modern stylistic mind map bubble nodes elements
+                let formattedTree = resText.replace(/^\s*\*\s+(.*?)$/gm, '<div class="ml-4 my-2 p-2 bg-arxiv-light border-l-4 border-arxiv-brand font-serif rounded shadow-xs text-xs font-medium text-arxiv-dark">➔ $1</div>');
+                workspace.innerHTML = `<h3 class="text-xs font-bold uppercase text-arxiv-brand border-b pb-2 mb-3">📍 Concept Node Tree Mindmap</h3><div class="space-y-1">${formattedTree}</div>`;
+            } catch (err) {
+                workspace.innerHTML = `<span class="text-red-600 text-xs">Error compiling mindmap.</span>`;
+            }
+        }
+
+        // Automated Minimal Slide Generation Interface Layer
+        async function generatePresentation() {
+            if (!appState.isKeyConnected) return alert("Connect your Gemini API key first.");
+            const activeDocs = appState.documents.filter(d => d.isActiveContext);
+            if (!activeDocs.length) return alert("Please upload notes files to create a presentation deck framework.");
+
+            switchRightTab('slides');
+            const workspace = document.getElementById('slidesWorkspace');
+            workspace.innerHTML = `<div class="text-center py-12 text-arxiv-slate animate-pulse"><i data-lucide="loader" class="w-6 h-6 animate-spin mx-auto mb-2"></i>Compiling minimalist slide layout decks...</div>`;
+            lucide.createIcons();
+
+            let contextStr = "";
+            activeDocs.forEach(d => d.pages.forEach(p => contextStr += p.text + " "));
+
+            const instruction = `Create a high-yield, minimalistic study presentation based on this material. Group into distinct slides separated clearly by '---'. Every slide should have a title and 3 clear summary bullet points. Content: ${contextStr}`;
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${appState.apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: instruction }] }] })
+                });
+                const data = await response.json();
+                const resText = data.candidates[0].content.parts[0].text;
+                
+                const slideBlocks = resText.split('---');
+                let slideHtmlDeck = `<h3 class="text-xs font-bold uppercase text-arxiv-brand border-b pb-2 mb-4">📺 Generated Revision Slide Deck</h3>`;
+                
+                slideBlocks.forEach((block, index) => {
+                    if(!block.trim()) return;
+                    slideHtmlDeck += `
+                        <div class="bg-arxiv-dark text-white p-5 rounded-lg font-serif mb-4 shadow-md min-h-[160px] flex flex-col justify-between">
+                            <div class="text-xs tracking-wide text-arxiv-light opacity-60 uppercase font-sans">Slide ${index + 1}</div>
+                            <div class="my-2 text-sm font-bold leading-snug">${formatMarkdownResponse(block)}</div>
+                        </div>
+                    `;
+                });
+                workspace.innerHTML = slideHtmlDeck;
+            } catch (err) {
+                workspace.innerHTML = `<span class="text-red-600 text-xs">Error compiling presentation deck panels.</span>`;
+            }
+        }
+
+        function appendMessageBubble(text, sender, uniqueId = null) {
+            const messagePane = document.getElementById('chatMessages');
+            const idTag = uniqueId ? `id="${uniqueId}"` : '';
+            
+            let wrapperClass = "flex justify-end";
+            let bubbleClass = "bg-arxiv-dark text-white rounded-lg p-3 max-w-[85%] text-xs font-sans shadow-sm";
+            
+            if (sender === 'bot') {
+                wrapperClass = "flex justify-start";
+                bubbleClass = "bg-white border border-arxiv-border text-arxiv-dark rounded-lg p-3.5 max-w-[85%] text-xs font-sans shadow-sm leading-relaxed space-y-2";
+            }
+
+            const bubbleHtml = `
+                <div class="${wrapperClass}">
+                    <div ${idTag} class="${bubbleClass}">
+                        ${sender === 'bot' ? text : escapeHtmlEntities(text)}
+                    </div>
+                </div>
+            `;
+            
+            messagePane.insertAdjacentHTML('beforeend', bubbleHtml);
+            messagePane.scrollTop = messagePane.scrollHeight;
+        }
+
+        function formatMarkdownResponse(rawStr) {
+            let processed = escapeHtmlEntities(rawStr);
+            processed = processed.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-arxiv-brand">$1</strong>');
+            processed = processed.replace(/^\s*\*\s+(.*?)$/gm, '<div class="flex items-start space-x-1.5 pl-1 my-0.5"><span>•</span><span>$1</span></div>');
+            processed = processed.replace(/\n/g, '<br>');
+            return processed;
+        }
+
+        function escapeHtmlEntities(string) {
+            return String(string).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+    </script>
+</body>
+</html>
